@@ -16,27 +16,31 @@ peg::parser! {
     grammar bind_parser() for str {
         rule _ = ([' ']*)
 
-        rule hex_usize() -> usize
+        rule hex_usize() -> Option<usize>
             = "0x" h:$(['0'..='9' | 'a'..='f' | 'A'..='F']+)
-            { usize::from_str_radix(h, 16).unwrap() }
+            { usize::from_str_radix(h, 16).ok() }
+
+        rule addr() -> Option<usize>
+            = "inline" { None }
+            / x:hex_usize() { x }
 
         rule entry() -> (Platform, Option<NonZeroUsize>)
-            = "win" _ v:hex_usize()
-                { (Platform::Windows, NonZeroUsize::new(v)) }
-            / "imac" _ v:hex_usize()
-                { (Platform::IntelMac, NonZeroUsize::new(v)) }
-            / "m1" _ v:hex_usize()
-                { (Platform::M1Mac, NonZeroUsize::new(v)) }
-            / "mac" _ v:hex_usize()
-                { (Platform::Mac, NonZeroUsize::new(v)) }
-            / "ios" _ v:hex_usize()
-                { (Platform::IOS, NonZeroUsize::new(v)) }
-            / "android32" _ v:hex_usize()
-                { (Platform::Android32, NonZeroUsize::new(v)) }
-            / "android64" _ v:hex_usize()
-                { (Platform::Android64, NonZeroUsize::new(v)) }
-            / "android" _ v:hex_usize()
-                { (Platform::Android, NonZeroUsize::new(v)) }
+            = "win" _ v:addr()
+                { (Platform::Windows, v.and_then(|v| NonZeroUsize::new(v))) }
+            / "imac" _ v:addr()
+                { (Platform::IntelMac, v.and_then(|v| NonZeroUsize::new(v))) }
+            / "m1" _ v:addr()
+                { (Platform::M1Mac, v.and_then(|v| NonZeroUsize::new(v))) }
+            / "mac" _ v:addr()
+                { (Platform::Mac, v.and_then(|v| NonZeroUsize::new(v))) }
+            / "ios" _ v:addr()
+                { (Platform::IOS, v.and_then(|v| NonZeroUsize::new(v))) }
+            / "android32" _ v:addr()
+                { (Platform::Android32, v.and_then(|v| NonZeroUsize::new(v))) }
+            / "android64" _ v:addr()
+                { (Platform::Android64, v.and_then(|v| NonZeroUsize::new(v))) }
+            / "android" _ v:addr()
+                { (Platform::Android, v.and_then(|v| NonZeroUsize::new(v))) }
 
         pub rule bind() -> Bind
             = l:(entry() ++ ("," _)) {
@@ -79,6 +83,19 @@ mod tests {
             .expect("failed to parse");
 
         assert_eq!(parsed.ios, NonZero::new(0x69));
+        assert_eq!(parsed.win, NonZero::new(0x67));
+        assert_eq!(parsed.android64, NonZero::new(0x42));
+        assert_eq!(parsed.android32, NonZero::new(0x42));
+        assert_eq!(parsed.m1_mac, NonZero::new(0x1));
+        assert_eq!(parsed.intel_mac, NonZero::new(0x3));
+    }
+
+    #[test]
+    fn parse_bind_inline() {
+        let parsed = bind_parser::bind("ios inline, win 0x67, android 0x42, m1 0x1, imac 0x3")
+            .expect("failed to parse");
+
+        assert_eq!(parsed.ios, None);
         assert_eq!(parsed.win, NonZero::new(0x67));
         assert_eq!(parsed.android64, NonZero::new(0x42));
         assert_eq!(parsed.android32, NonZero::new(0x42));
