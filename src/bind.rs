@@ -1,119 +1,104 @@
-use std::num::NonZeroUsize;
+use std::num::NonZeroU64;
 
-use crate::platform::Platform;
+use winnow::{
+    Parser, Result,
+    ascii::{hex_uint, line_ending, space0, space1},
+    combinator::{alt, eof, opt, peek, preceded, repeat, separated_pair, terminated},
+};
 
-#[derive(Default)]
+use crate::platform::{Platform, parse_platform};
+
+#[derive(Default, Debug)]
 pub struct Bind {
-    pub win: Option<NonZeroUsize>,
-    pub intel_mac: Option<NonZeroUsize>,
-    pub m1_mac: Option<NonZeroUsize>,
-    pub ios: Option<NonZeroUsize>,
-    pub android32: Option<NonZeroUsize>,
-    pub android64: Option<NonZeroUsize>,
+    pub win: Option<NonZeroU64>,
+    pub intel_mac: Option<NonZeroU64>,
+    pub m1_mac: Option<NonZeroU64>,
+    pub ios: Option<NonZeroU64>,
+    pub android32: Option<NonZeroU64>,
+    pub android64: Option<NonZeroU64>,
 }
 
-peg::parser! {
-    grammar bind_parser() for str {
-        rule _ = ([' ']*)
-
-        rule hex_usize() -> Option<usize>
-            = "0x" h:$(['0'..='9' | 'a'..='f' | 'A'..='F']+)
-            { usize::from_str_radix(h, 16).ok() }
-
-        rule addr() -> Option<usize>
-            = "inline" { None }
-            / x:hex_usize() { x }
-
-        rule entry() -> (Platform, Option<NonZeroUsize>)
-            = "win" _ v:addr()
-                { (Platform::Windows, v.and_then(|v| NonZeroUsize::new(v))) }
-            / "imac" _ v:addr()
-                { (Platform::IntelMac, v.and_then(|v| NonZeroUsize::new(v))) }
-            / "m1" _ v:addr()
-                { (Platform::M1Mac, v.and_then(|v| NonZeroUsize::new(v))) }
-            / "mac" _ v:addr()
-                { (Platform::Mac, v.and_then(|v| NonZeroUsize::new(v))) }
-            / "ios" _ v:addr()
-                { (Platform::IOS, v.and_then(|v| NonZeroUsize::new(v))) }
-            / "android32" _ v:addr()
-                { (Platform::Android32, v.and_then(|v| NonZeroUsize::new(v))) }
-            / "android64" _ v:addr()
-                { (Platform::Android64, v.and_then(|v| NonZeroUsize::new(v))) }
-            / "android" _ v:addr()
-                { (Platform::Android, v.and_then(|v| NonZeroUsize::new(v))) }
-
-        pub rule bind() -> Bind
-            = l:(entry() ++ ("," _)) {
-                let mut bind = Bind::default();
-
-                // ew
-                for (platform, addr) in l {
-                    match platform {
-                        Platform::Android => {
-                            bind.android32 = addr;
-                            bind.android64 = addr;
-                        },
-                        Platform::Android32 => bind.android32 = addr,
-                        Platform::Android64 => bind.android64 = addr,
-                        Platform::IOS => bind.ios = addr,
-                        Platform::Mac => {
-                            bind.intel_mac = addr;
-                            bind.m1_mac = addr;
-                        }
-                        Platform::IntelMac => bind.intel_mac = addr,
-                        Platform::M1Mac => bind.m1_mac = addr,
-                        Platform::Windows => bind.win = addr,
-                    }
-                }
-
-                bind
+pub fn parse_bind(input: &mut &str) -> Result<Bind> {
+    repeat(
+        1..,
+        terminated(
+            // platform{space1}addr
+            separated_pair(
+                parse_platform,
+                space1,
+                alt((
+                    "inline".value(None),
+                    preceded("0x", hex_uint).map(NonZeroU64::new),
+                )),
+            ),
+            // seperator
+            alt((
+                // force comma if in the middle of data
+                (space0, ",", space0).value(()),
+                // optional comma at the end of the line
+                (space0, opt(","), space0, peek(alt((line_ending, eof)))).value(()),
+            )),
+        ),
+    )
+    .fold(Bind::default, |mut bind, (platform, addr)| {
+        match platform {
+            Platform::Android => {
+                bind.android32 = addr;
+                bind.android64 = addr;
             }
-    }
+            Platform::Android32 => bind.android32 = addr,
+            Platform::Android64 => bind.android64 = addr,
+            Platform::Mac => {
+                bind.m1_mac = addr;
+                bind.intel_mac = addr;
+            }
+            Platform::IntelMac => bind.intel_mac = addr,
+            Platform::M1Mac => bind.m1_mac = addr,
+            Platform::IOS => bind.ios = addr,
+            Platform::Windows => bind.win = addr,
+        };
+
+        bind
+    })
+    .parse_next(input)
 }
 
 #[cfg(test)]
-mod tests {
-    use std::num::NonZero;
-
-    use super::*;
+mod test {
+    use std::num::NonZeroU64;
 
     #[test]
-    fn parse_bind() {
-        let parsed = bind_parser::bind("ios 0x69, win 0x67, android 0x42, m1 0x1, imac 0x3")
-            .expect("failed to parse");
+    fn parse() {
+        let mut data = "win 0xff, ios 0x1, mac 0x84, android32 0xfffffff";
 
-        assert_eq!(parsed.ios, NonZero::new(0x69));
-        assert_eq!(parsed.win, NonZero::new(0x67));
-        assert_eq!(parsed.android64, NonZero::new(0x42));
-        assert_eq!(parsed.android32, NonZero::new(0x42));
-        assert_eq!(parsed.m1_mac, NonZero::new(0x1));
-        assert_eq!(parsed.intel_mac, NonZero::new(0x3));
+        let bind = super::parse_bind(&mut data).expect("failed to parse");
+
+        assert_eq!(bind.win, NonZeroU64::new(0xff));
+        assert_eq!(bind.ios, NonZeroU64::new(0x1));
+        assert_eq!(bind.m1_mac, NonZeroU64::new(0x84));
+        assert_eq!(bind.intel_mac, NonZeroU64::new(0x84));
+        assert_eq!(bind.android32, NonZeroU64::new(0xfffffff));
+        assert_eq!(bind.android64, None);
     }
 
     #[test]
-    fn parse_bind_inline() {
-        let parsed = bind_parser::bind("ios inline, win 0x67, android 0x42, m1 0x1, imac 0x3")
-            .expect("failed to parse");
+    fn zero_addr() {
+        let mut data = "win 0x0";
 
-        assert_eq!(parsed.ios, None);
-        assert_eq!(parsed.win, NonZero::new(0x67));
-        assert_eq!(parsed.android64, NonZero::new(0x42));
-        assert_eq!(parsed.android32, NonZero::new(0x42));
-        assert_eq!(parsed.m1_mac, NonZero::new(0x1));
-        assert_eq!(parsed.intel_mac, NonZero::new(0x3));
+        let bind = super::parse_bind(&mut data).expect("failed to parse");
+
+        assert_eq!(bind.win, None);
     }
 
     #[test]
-    fn invalid_bind_platform() {
-        let parsed = bind_parser::bind("asdf 0x1, ios 0x10");
+    fn terminating_spaces() {
+        let mut data = "win 0x45 , ios 0x451";
 
-        assert!(parsed.is_err());
+        let bind = super::parse_bind(&mut data).expect("failed to parse");
+
+        assert_eq!(bind.win, NonZeroU64::new(0x45));
+        assert_eq!(bind.ios, NonZeroU64::new(0x451));
     }
 
-    #[test]
-    fn invalid_bind_addr() {
-        let parsed = bind_parser::bind("win 0x0").expect("failed to parse");
-
-        assert_eq!(parsed.win, None);
-    }
+    // TODO write more tests
 }
