@@ -1,16 +1,21 @@
 use winnow::{
     Parser, Result,
     ascii::{multispace0, multispace1},
-    combinator::{delimited, opt, preceded, separated},
-    token::take_until,
+    combinator::{alt, delimited, opt, preceded, repeat, separated},
 };
 
-use crate::util::identifier;
+use crate::{
+    member::{Member, parse_member},
+    method::{Method, parse_method},
+    util::identifier,
+};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Class {
     pub name: String,
     pub superclasses: Vec<String>,
+    pub methods: Vec<Method>,
+    pub members: Vec<Member>,
 }
 
 fn opt_supers(input: &mut &str) -> Result<Option<Vec<String>>> {
@@ -25,6 +30,12 @@ fn opt_supers(input: &mut &str) -> Result<Option<Vec<String>>> {
     .parse_next(input)
 }
 
+#[derive(Clone)]
+enum Child {
+    Method(Method),
+    Member(Member),
+}
+
 pub fn parse_class(input: &mut &str) -> Result<Class> {
     preceded(
         ("class", multispace1),
@@ -33,12 +44,42 @@ pub fn parse_class(input: &mut &str) -> Result<Class> {
             multispace0,
             opt_supers,
             multispace0,
-            delimited("{", take_until(0.., "}"), "}"),
+            delimited(
+                "{",
+                alt((
+                    repeat(
+                        0..,
+                        preceded(
+                            multispace0,
+                            alt((
+                                parse_method.map(|x| Child::Method(x)),
+                                parse_member.map(|x| Child::Member(x)),
+                            )),
+                        ),
+                    ),
+                    multispace0.value(Vec::new()),
+                )),
+                "}",
+            ),
         ),
     )
-    .map(|(name, _, superclasses, _, _)| Class {
-        name,
-        superclasses: superclasses.unwrap_or_default(),
+    .map(|parsed: (String, _, Option<Vec<String>>, _, Vec<Child>)| {
+        let mut members = Vec::new();
+        let mut methods = Vec::new();
+
+        for child in parsed.4 {
+            match child {
+                Child::Member(x) => members.push(x),
+                Child::Method(x) => methods.push(x),
+            }
+        }
+
+        Class {
+            name: parsed.0,
+            superclasses: parsed.2.unwrap_or_default(),
+            members,
+            methods,
+        }
     })
     .parse_next(input)
 }
@@ -92,5 +133,15 @@ mod test {
 
         assert_eq!(class.name, "Test");
         assert_eq!(class.superclasses, vec!["super", "Super2"]);
+    }
+
+    // TODO
+    #[test]
+    fn member() {
+        let mut data = "class Test { }";
+
+        let class = super::parse_class(&mut data).expect("failed to parse");
+
+        assert_eq!(class.name, "Test");
     }
 }
