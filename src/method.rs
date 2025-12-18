@@ -1,7 +1,8 @@
 use winnow::{
     Parser, Result,
     ascii::{multispace0, multispace1},
-    combinator::{delimited, preceded, separated, separated_pair, terminated},
+    combinator::{alt, delimited, preceded, separated, separated_pair, terminated},
+    token::take_until,
 };
 
 use crate::{
@@ -54,7 +55,13 @@ pub fn parse_method(input: &mut &str) -> Result<Method> {
 
     let bind = preceded(
         (multispace0, "=", multispace0),
-        terminated(bind::parse_bind, (multispace0, ";")),
+        terminated(
+            bind::parse_bind,
+            alt((
+                (multispace0, ";").value(()),
+                (multispace0, "{", take_until(0.., "}"), "}").value(()),
+            )),
+        ),
     )
     .parse_next(input)?;
 
