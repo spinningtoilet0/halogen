@@ -91,7 +91,7 @@ mod test {
     }
 
     #[test]
-    fn terminating_spaces() {
+    fn trailing_spaces() {
         let mut data = "win 0x45 , ios 0x451         ";
 
         let bind = super::parse_bind(&mut data).expect("failed to parse");
@@ -103,7 +103,7 @@ mod test {
 
     #[test]
     fn no_comma() {
-        let mut data = "android32 0x45 android 0x451 ";
+        let mut data = "android32 0x45 android 0x451";
 
         let bind = super::parse_bind(&mut data);
 
