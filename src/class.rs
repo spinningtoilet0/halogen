@@ -2,16 +2,14 @@ use winnow::{
     Parser, Result,
     ascii::{multispace0, multispace1},
     combinator::{delimited, opt, preceded, separated},
-    token::{take_until, take_while},
+    token::take_until,
 };
+
+use crate::util::identifier;
 
 pub struct Class {
     pub name: String,
     pub superclasses: Vec<String>,
-}
-
-fn identifier<'a>(input: &mut &'a str) -> Result<&'a str> {
-    take_while(1.., ('a'..='z', 'A'..='Z', '0'..='9', ':', '_')).parse_next(input)
 }
 
 fn opt_supers(input: &mut &str) -> Result<Option<Vec<String>>> {
@@ -19,7 +17,7 @@ fn opt_supers(input: &mut &str) -> Result<Option<Vec<String>>> {
         (":", multispace0),
         separated(
             1..,
-            preceded(multispace0, identifier.map(String::from)),
+            preceded(multispace0, identifier.map(str::to_owned)),
             (multispace0, ",", multispace0),
         ),
     ))
