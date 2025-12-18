@@ -92,13 +92,32 @@ mod test {
 
     #[test]
     fn terminating_spaces() {
-        let mut data = "win 0x45 , ios 0x451";
+        let mut data = "win 0x45 , ios 0x451         ";
 
         let bind = super::parse_bind(&mut data).expect("failed to parse");
 
         assert_eq!(bind.win, NonZeroU64::new(0x45));
         assert_eq!(bind.ios, NonZeroU64::new(0x451));
+        assert!(data.is_empty());
     }
 
-    // TODO write more tests
+    #[test]
+    fn no_comma() {
+        let mut data = "android32 0x45 android 0x451 ";
+
+        let bind = super::parse_bind(&mut data);
+
+        assert!(bind.is_err());
+    }
+
+    #[test]
+    fn inline() {
+        let mut data = "mac inline, android32 0xfffffffffff";
+
+        let bind = super::parse_bind(&mut data).expect("failed to parse");
+
+        assert_eq!(bind.m1_mac, None);
+        assert_eq!(bind.intel_mac, None);
+        assert_eq!(bind.android32, NonZeroU64::new(0xfffffffffff));
+    }
 }
