@@ -1,7 +1,7 @@
 use winnow::{
     Parser, Result,
     ascii::{multispace0, multispace1},
-    combinator::{alt, delimited, preceded, separated, separated_pair, terminated},
+    combinator::{alt, delimited, opt, preceded, separated, separated_pair, terminated},
     token::take_until,
 };
 
@@ -31,6 +31,10 @@ pub struct Method {
     pub return_type: String,
     pub params: Vec<TypedParameter>,
     pub bind: Bind,
+    /// Denotes if the function is virtual
+    pub virt: bool,
+    /// Denotes if the function is static
+    pub stat: bool,
 }
 
 fn opt_parameters(input: &mut &str) -> Result<Vec<TypedParameter>> {
@@ -47,7 +51,22 @@ fn opt_parameters(input: &mut &str) -> Result<Vec<TypedParameter>> {
         .collect())
 }
 
+#[derive(Clone)]
+enum VirtualOrStatic {
+    Virtual,
+    Static,
+}
+
 pub fn parse_method(input: &mut &str) -> Result<Method> {
+    let virtual_or_static = opt(terminated(
+        alt((
+            "virtual".value(VirtualOrStatic::Virtual),
+            "static".value(VirtualOrStatic::Static),
+        )),
+        multispace0,
+    ))
+    .parse_next(input)?;
+
     let (return_type, name) =
         separated_pair(identifier, multispace1, identifier).parse_next(input)?;
 
@@ -65,11 +84,16 @@ pub fn parse_method(input: &mut &str) -> Result<Method> {
     )
     .parse_next(input)?;
 
+    let virt = matches!(virtual_or_static, Some(VirtualOrStatic::Virtual));
+    let stat = matches!(virtual_or_static, Some(VirtualOrStatic::Static));
+
     Ok(Method {
         return_type: return_type.to_owned(),
         name: name.to_owned(),
         params,
         bind,
+        virt,
+        stat,
     })
 }
 
