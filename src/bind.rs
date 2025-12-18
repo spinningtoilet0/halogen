@@ -37,6 +37,8 @@ pub fn parse_bind(input: &mut &str) -> Result<Bind> {
                 (space0, ",", space0).value(()),
                 // optional comma at the end of the line
                 (space0, opt(","), space0, peek(alt((line_ending, eof)))).value(()),
+                // nothing necessary if at the end of a line
+                peek(";").value(()),
             )),
         ),
     )
@@ -108,6 +110,16 @@ mod test {
         let bind = super::parse_bind(&mut data);
 
         assert!(bind.is_err());
+    }
+
+    #[test]
+    fn semicolon() {
+        let mut data = "win 0x1;";
+
+        let bind = super::parse_bind(&mut data).expect("failed to parse");
+
+        assert_eq!(bind.win, NonZeroU64::new(0x1));
+        assert_eq!(data, ";");
     }
 
     #[test]
