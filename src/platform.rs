@@ -12,7 +12,7 @@ pub enum Platform {
     Android64,
 }
 
-pub fn parse_platform<'s>(input: &mut &'s str) -> Result<Platform> {
+pub fn parse_platform(input: &mut &str) -> Result<Platform> {
     alt((
         "android64".value(Platform::Android64),
         "android32".value(Platform::Android32),
