@@ -9,11 +9,22 @@ use crate::{
     util::identifier,
 };
 
+#[derive(Debug, PartialEq)]
 pub struct TypedParameter {
     pub ty: String,
     pub name: String,
 }
 
+impl TypedParameter {
+    fn new(ty: &str, name: &str) -> Self {
+        Self {
+            ty: ty.to_owned(),
+            name: name.to_owned(),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Method {
     pub name: String,
     pub return_type: String,
@@ -31,10 +42,7 @@ fn opt_parameters(input: &mut &str) -> Result<Vec<TypedParameter>> {
 
     Ok(params
         .into_iter()
-        .map(|(ty, name)| TypedParameter {
-            ty: ty.to_owned(),
-            name: name.to_owned(),
-        })
+        .map(|(ty, name)| TypedParameter::new(ty, name))
         .collect())
 }
 
@@ -62,6 +70,8 @@ pub fn parse_method(input: &mut &str) -> Result<Method> {
 mod test {
     use std::num::NonZeroU64;
 
+    use crate::method::TypedParameter;
+
     #[test]
     fn parse() {
         let mut data = "int someFunc() = ios 0x17;";
@@ -72,5 +82,24 @@ mod test {
         assert_eq!(method.name, "someFunc");
         assert!(method.params.is_empty());
         assert_eq!(method.bind.ios, NonZeroU64::new(0x17));
+    }
+
+    #[test]
+    fn parameters() {
+        let mut data = "int someFunc(int hi, double somethingFLoat) = win 0x67, android32 0x99;";
+
+        let method = super::parse_method(&mut data).expect("failed to parse");
+
+        assert_eq!(method.return_type, "int");
+        assert_eq!(method.name, "someFunc");
+        assert_eq!(
+            method.params,
+            vec![
+                TypedParameter::new("int", "hi"),
+                TypedParameter::new("double", "somethingFLoat")
+            ]
+        );
+        assert_eq!(method.bind.win, NonZeroU64::new(0x67));
+        assert_eq!(method.bind.android32, NonZeroU64::new(0x99));
     }
 }
