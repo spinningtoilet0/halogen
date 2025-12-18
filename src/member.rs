@@ -2,6 +2,7 @@ use winnow::{Parser, Result, ascii::multispace1, combinator::separated_pair};
 
 use crate::util::identifier;
 
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Member {
     pub ty: String,
     pub name: String,

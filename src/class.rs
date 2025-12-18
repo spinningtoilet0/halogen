@@ -7,6 +7,7 @@ use winnow::{
 
 use crate::util::identifier;
 
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Class {
     pub name: String,
     pub superclasses: Vec<String>,

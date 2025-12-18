@@ -1,6 +1,6 @@
 use winnow::{Parser, Result, combinator::alt};
 
-#[derive(Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Platform {
     Windows,
     Mac,

@@ -8,7 +8,7 @@ use winnow::{
 
 use crate::platform::{Platform, parse_platform};
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub struct Bind {
     pub win: Option<NonZeroU64>,
     pub intel_mac: Option<NonZeroU64>,

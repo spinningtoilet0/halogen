@@ -9,7 +9,7 @@ use crate::{
     util::identifier,
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TypedParameter {
     pub ty: String,
     pub name: String,
@@ -24,7 +24,7 @@ impl TypedParameter {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Method {
     pub name: String,
     pub return_type: String,
