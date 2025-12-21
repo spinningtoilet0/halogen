@@ -1,8 +1,8 @@
 use winnow::{
     Parser, Result,
     ascii::{multispace0, multispace1},
-    combinator::{alt, delimited, opt, preceded, separated, separated_pair, terminated},
-    token::take_until,
+    combinator::{alt, delimited, opt, preceded, repeat, separated, separated_pair, terminated},
+    token::none_of,
 };
 
 use crate::{
@@ -57,13 +57,27 @@ enum VirtualOrStatic {
     Static,
 }
 
+fn balance_braces<'a>(input: &mut &'a str) -> Result<()> {
+    delimited(
+        "{",
+        repeat(
+            0..,
+            alt((balance_braces.void(), none_of(['{', '}']).void())),
+        ),
+        "}",
+    )
+    .parse_next(input)
+}
+
 pub fn parse_method(input: &mut &str) -> Result<Method> {
+    let _ = multispace0.parse_next(input)?;
+
     let virtual_or_static = opt(terminated(
         alt((
             "virtual".value(VirtualOrStatic::Virtual),
             "static".value(VirtualOrStatic::Static),
         )),
-        multispace0,
+        multispace1,
     ))
     .parse_next(input)?;
 
@@ -77,8 +91,8 @@ pub fn parse_method(input: &mut &str) -> Result<Method> {
         terminated(
             bind::parse_bind,
             alt((
-                (multispace0, ";").value(()),
-                (multispace0, "{", take_until(0.., "}"), "}").value(()),
+                (multispace0, balance_braces).void(),
+                (multispace0, ";").void(),
             )),
         ),
     )
@@ -132,5 +146,25 @@ mod test {
         );
         assert_eq!(method.bind.win, NonZeroU64::new(0x67));
         assert_eq!(method.bind.android32, NonZeroU64::new(0x99));
+    }
+
+    #[test]
+    fn method_body() {
+        let mut data = "int someFunc(int hi, double somethingFLoat) = win 0x67, android32 0x99 {lalalalalala im ignored and these are some braces {{{{}}}} lalalala}";
+
+        let method = super::parse_method(&mut data).expect("failed to parse");
+
+        assert_eq!(method.return_type, "int");
+        assert_eq!(method.name, "someFunc");
+        assert_eq!(
+            method.params,
+            vec![
+                TypedParameter::new("int", "hi"),
+                TypedParameter::new("double", "somethingFLoat")
+            ]
+        );
+        assert_eq!(method.bind.win, NonZeroU64::new(0x67));
+        assert_eq!(method.bind.android32, NonZeroU64::new(0x99));
+        assert!(data.is_empty());
     }
 }
